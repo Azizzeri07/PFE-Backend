@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36221.1 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "STB-Bank-Transfer", "STB-Bank-Transfer\STB-Bank-Transfer.csproj", "{8ED17171-089B-4E0E-8BD4-3F5330455F08}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8ED17171-089B-4E0E-8BD4-3F5330455F08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8ED17171-089B-4E0E-8BD4-3F5330455F08}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8ED17171-089B-4E0E-8BD4-3F5330455F08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8ED17171-089B-4E0E-8BD4-3F5330455F08}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8938032A-6F71-4CB5-94B5-11C5F6682E28}
+	EndGlobalSection
+EndGlobal
