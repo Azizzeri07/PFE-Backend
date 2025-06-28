@@ -1,7 +1,5 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Net.Sockets;
 
 namespace STB_Bank_Transfer.Models
 {
@@ -24,17 +22,5 @@ namespace STB_Bank_Transfer.Models
         public DateTime? DateValidation { get; set; }
         public StatutVirement Statut { get; set; }
         public string RaisonRejet { get; set; }
-
-        public int IdCompte { get; set; }
-
-        [ForeignKey("IdCompte")]
-        public Compte Comptes { get; set; }
-
-        [ForeignKey("Client")]
-        public int ClientId { get; set; }
-
-        public Client Client { get; set; }
-
-
     }
 }

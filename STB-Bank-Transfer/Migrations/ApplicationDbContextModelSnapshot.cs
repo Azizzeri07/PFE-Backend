@@ -40,17 +40,9 @@ namespace STB_Bank_Transfer.Migrations
 
                     b.Property<string>("Nom")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("IdBanquier");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
 
                     b.ToTable("Banquiers");
                 });
@@ -63,16 +55,12 @@ namespace STB_Bank_Transfer.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("IdClient"));
 
-                    b.Property<int>("BanquierId")
+                    b.Property<int?>("BanquierIdBanquier")
                         .HasColumnType("integer");
 
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("IdCompte")
-                        .HasColumnType("integer");
+                        .HasColumnType("text");
 
                     b.Property<string>("MotDePasse")
                         .IsRequired()
@@ -80,50 +68,28 @@ namespace STB_Bank_Transfer.Migrations
 
                     b.Property<string>("Nom")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("IdClient");
 
-                    b.HasIndex("BanquierId");
-
-                    b.HasIndex("IdCompte")
-                        .IsUnique();
+                    b.HasIndex("BanquierIdBanquier");
 
                     b.ToTable("Clients");
                 });
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Compte", b =>
                 {
-                    b.Property<int>("IdCompte")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("IdCompte"));
-
-                    b.Property<int>("BanquierId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("integer");
+                    b.Property<string>("IdCompte")
+                        .HasColumnType("text");
 
                     b.Property<decimal>("Solde")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("numeric");
 
                     b.Property<string>("TypeCompte")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasColumnType("text");
 
                     b.HasKey("IdCompte");
-
-                    b.HasIndex("BanquierId");
-
-                    b.HasIndex("ClientId");
 
                     b.ToTable("Comptes");
                 });
@@ -136,8 +102,8 @@ namespace STB_Bank_Transfer.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("IdOperation"));
 
-                    b.Property<int>("CompteId")
-                        .HasColumnType("integer");
+                    b.Property<string>("CompteIdCompte")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("DateOperation")
                         .HasColumnType("timestamp with time zone");
@@ -159,7 +125,7 @@ namespace STB_Bank_Transfer.Migrations
 
                     b.HasKey("IdOperation");
 
-                    b.HasIndex("CompteId");
+                    b.HasIndex("CompteIdCompte");
 
                     b.ToTable("Operations");
                 });
@@ -172,14 +138,17 @@ namespace STB_Bank_Transfer.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("IdVirement"));
 
+                    b.Property<int?>("BanquierIdBanquier")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ClientIdClient")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("DateCreation")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("DateValidation")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("IdCompte")
-                        .HasColumnType("integer");
 
                     b.Property<decimal>("Montant")
                         .HasColumnType("numeric");
@@ -205,74 +174,48 @@ namespace STB_Bank_Transfer.Migrations
 
                     b.HasKey("IdVirement");
 
-                    b.HasIndex("IdCompte");
+                    b.HasIndex("BanquierIdBanquier");
+
+                    b.HasIndex("ClientIdClient");
 
                     b.ToTable("Virements");
                 });
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Client", b =>
                 {
-                    b.HasOne("STB_Bank_Transfer.Models.Banquier", "Banquier")
-                        .WithMany()
-                        .HasForeignKey("BanquierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("STB_Bank_Transfer.Models.Compte", "CompteS")
-                        .WithOne()
-                        .HasForeignKey("STB_Bank_Transfer.Models.Client", "IdCompte")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Banquier");
-
-                    b.Navigation("CompteS");
-                });
-
-            modelBuilder.Entity("STB_Bank_Transfer.Models.Compte", b =>
-                {
-                    b.HasOne("STB_Bank_Transfer.Models.Banquier", "Banquier")
-                        .WithMany()
-                        .HasForeignKey("BanquierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("STB_Bank_Transfer.Models.Client", "Client")
-                        .WithMany("Comptes")
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Banquier");
-
-                    b.Navigation("Client");
+                    b.HasOne("STB_Bank_Transfer.Models.Banquier", null)
+                        .WithMany("Clients")
+                        .HasForeignKey("BanquierIdBanquier");
                 });
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Operation", b =>
                 {
-                    b.HasOne("STB_Bank_Transfer.Models.Compte", "Compte")
+                    b.HasOne("STB_Bank_Transfer.Models.Compte", null)
                         .WithMany("HistoriqueOperations")
-                        .HasForeignKey("CompteId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Compte");
+                        .HasForeignKey("CompteIdCompte");
                 });
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Virement", b =>
                 {
-                    b.HasOne("STB_Bank_Transfer.Models.Compte", "Comptes")
-                        .WithMany()
-                        .HasForeignKey("IdCompte")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.HasOne("STB_Bank_Transfer.Models.Banquier", null)
+                        .WithMany("VirementsEnAttente")
+                        .HasForeignKey("BanquierIdBanquier");
 
-                    b.Navigation("Comptes");
+                    b.HasOne("STB_Bank_Transfer.Models.Client", null)
+                        .WithMany("Virements")
+                        .HasForeignKey("ClientIdClient");
+                });
+
+            modelBuilder.Entity("STB_Bank_Transfer.Models.Banquier", b =>
+                {
+                    b.Navigation("Clients");
+
+                    b.Navigation("VirementsEnAttente");
                 });
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Client", b =>
                 {
-                    b.Navigation("Comptes");
+                    b.Navigation("Virements");
                 });
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Compte", b =>

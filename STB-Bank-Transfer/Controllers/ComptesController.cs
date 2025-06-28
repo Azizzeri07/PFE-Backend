@@ -16,8 +16,6 @@ namespace STB_Bank_Transfer.Controllers
             _context = context;
         }
 
-
-       
         [HttpGet("{id}")]
         public async Task<ActionResult<Compte>> GetCompte(string id)
         {

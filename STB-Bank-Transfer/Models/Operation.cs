@@ -1,7 +1,5 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace STB_Bank_Transfer.Models
 {
     public class Operation
@@ -12,11 +10,11 @@ namespace STB_Bank_Transfer.Models
         public decimal Montant { get; set; }
         public DateTime DateOperation { get; set; }
         public string Libelle { get; set; }
-        public string TypeOperation { get; set; }
+        public string TypeOperation { get; set; } // "Débit" ou "Crédit"
 
-        public int CompteId { get; set; } // Should be int, not string
-
-        [ForeignKey("CompteId")]
-        public Compte Compte { get; set; }
+        internal static int GetNextOperationId()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

@@ -5,24 +5,16 @@ namespace STB_Bank_Transfer.Models
 {
     public class Banquier
     {
-        [Key]
+        [Key]  // This attribute marks the property as primary key
         public int IdBanquier { get; set; }
         public string Nom { get; set; }
         public string Email { get; set; }
         public string MotDePasse { get; set; }
-        public string Role { get; set; } 
 
+        // Navigation property for clients created by this banker
+        public List<Client> Clients { get; set; } = new List<Client>();
 
-        public void SetPassword(string password)
-        {
-            MotDePasse = BCrypt.Net.BCrypt.HashPassword(password);
-        }
-
-        public bool VerifyPassword(string password)
-        {
-            return BCrypt.Net.BCrypt.Verify(password, MotDePasse);
-        }
-
-
+        // Navigation property for pending transfers
+        public List<Virement> VirementsEnAttente { get; set; } = new List<Virement>();
     }
 }
