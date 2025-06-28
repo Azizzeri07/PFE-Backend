@@ -2,54 +2,34 @@
 using Microsoft.EntityFrameworkCore;
 using STB_Bank_Transfer.Data;
 using STB_Bank_Transfer.Models;
+using System;
+using System.Threading.Tasks;
 
 namespace STB_Bank_Transfer.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class OperationsController : ControllerBase
+    public class OperationController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
 
-        public OperationsController(ApplicationDbContext context)
+        public OperationController(ApplicationDbContext context)
         {
             _context = context;
-        }
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Operation>>> GetOperations()
-        {
-            return await _context.Operations.ToListAsync();
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Operation>> GetOperation(int id)
         {
-            var operation = await _context.Operations.FindAsync(id);
-            if (operation == null) return NotFound();
-            return operation;
+            var op = await _context.Operations.FindAsync(id);
+            if (op == null) return NotFound();
+            return op;
         }
 
-        [HttpGet("Compte/{numeroCompte}")]
-        public async Task<ActionResult<IEnumerable<Operation>>> GetOperationsByCompte(string numeroCompte)
+        [HttpPost]
+        public async Task<ActionResult<Operation>> CreateOperation(Operation operation)
         {
-            return await _context.Operations
-                .Where(o => o.NumCompte == numeroCompte)
-                .OrderByDescending(o => o.DateOperation)
-                .ToListAsync();
-        }
-
-        [HttpPost("Debit")]
-        public async Task<ActionResult<Operation>> PostOperationDebit(Operation operation)
-        {
-            var compte = await _context.Comptes.FindAsync(operation.NumCompte);
-            if (compte == null) return NotFound("Compte non trouvé");
-
-            if (!compte.Debiter(operation.Montant))
-                return BadRequest("Solde insuffisant");
-
-            operation.DateOperation = DateTime.Now;
-            operation.TypeOperation = "Débit";
+            operation.DateOperation = DateTime.UtcNow;
 
             _context.Operations.Add(operation);
             await _context.SaveChangesAsync();
@@ -57,33 +37,41 @@ namespace STB_Bank_Transfer.Controllers
             return CreatedAtAction(nameof(GetOperation), new { id = operation.IdOperation }, operation);
         }
 
-        [HttpPost("Credit")]
-        public async Task<ActionResult<Operation>> PostOperationCredit(Operation operation)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateOperation(int id, Operation operation)
         {
-            var compte = await _context.Comptes.FindAsync(operation.NumCompte);
-            if (compte == null) return NotFound("Compte non trouvé");
+            if (id != operation.IdOperation) return BadRequest();
 
-            compte.Crediter(operation.Montant);
+            _context.Entry(operation).State = EntityState.Modified;
 
-            operation.DateOperation = DateTime.Now;
-            operation.TypeOperation = "Crédit";
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!OperationExists(id)) return NotFound();
+                else throw;
+            }
 
-            _context.Operations.Add(operation);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetOperation), new { id = operation.IdOperation }, operation);
+            return NoContent();
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteOperation(int id)
         {
-            var operation = await _context.Operations.FindAsync(id);
-            if (operation == null) return NotFound();
+            var op = await _context.Operations.FindAsync(id);
+            if (op == null) return NotFound();
 
-            _context.Operations.Remove(operation);
+            _context.Operations.Remove(op);
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        private bool OperationExists(int id)
+        {
+            return _context.Operations.Any(e => e.IdOperation == id);
         }
     }
 }

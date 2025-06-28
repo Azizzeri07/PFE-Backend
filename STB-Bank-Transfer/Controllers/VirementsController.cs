@@ -1,52 +1,84 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using STB_Bank_Transfer.Data;
 using STB_Bank_Transfer.Models;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace STB_Bank_Transfer.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class VirementsController : ControllerBase
+    public class VirementController : ControllerBase
     {
-        private static List<Virement> virements = new List<Virement>();
-        private static int nextVirementId = 1;
+        private readonly ApplicationDbContext _context;
 
-        public static int GetNextVirementId() => nextVirementId++;
+        public VirementController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
 
         [HttpGet]
-        public ActionResult<List<Virement>> GetVirementsEnAttente()
+        public async Task<ActionResult<IEnumerable<Virement>>> GetVirements()
         {
-            return virements.Where(v => v.Statut == StatutVirement.EN_ATTENTE).ToList();
+            return await _context.Virements.ToListAsync();
         }
 
         [HttpGet("{id}")]
-        public ActionResult<Virement> GetVirement(int id)
+        public async Task<ActionResult<Virement>> GetVirement(int id)
         {
-            var virement = virements.FirstOrDefault(v => v.IdVirement == id);
+            var virement = await _context.Virements.FindAsync(id);
             if (virement == null) return NotFound();
             return virement;
         }
 
-        [HttpPost("{id}/Valider")]
-        public IActionResult ValiderVirement(int id)
+        [HttpPost]
+        public async Task<ActionResult<Virement>> CreateVirement(Virement virement)
         {
-            var virement = virements.FirstOrDefault(v => v.IdVirement == id);
-            if (virement == null) return NotFound();
+            virement.DateCreation = System.DateTime.UtcNow;
+            virement.Statut = StatutVirement.EN_ATTENTE;
 
-            virement.Statut = StatutVirement.APPROUVE;
-            virement.DateValidation = DateTime.Now;
+            _context.Virements.Add(virement);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetVirement), new { id = virement.IdVirement }, virement);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateVirement(int id, Virement virement)
+        {
+            if (id != virement.IdVirement) return BadRequest();
+
+            _context.Entry(virement).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!VirementExists(id)) return NotFound();
+                else throw;
+            }
+
             return NoContent();
         }
 
-        [HttpPost("{id}/Rejeter")]
-        public IActionResult RejeterVirement(int id, [FromBody] string raison)
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteVirement(int id)
         {
-            var virement = virements.FirstOrDefault(v => v.IdVirement == id);
+            var virement = await _context.Virements.FindAsync(id);
             if (virement == null) return NotFound();
 
-            virement.Statut = StatutVirement.REJETE;
-            virement.RaisonRejet = raison;
-            virement.DateValidation = DateTime.Now;
+            _context.Virements.Remove(virement);
+            await _context.SaveChangesAsync();
+
             return NoContent();
+        }
+
+        private bool VirementExists(int id)
+        {
+            return _context.Virements.Any(e => e.IdVirement == id);
         }
     }
 }

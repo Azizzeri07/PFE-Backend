@@ -1,130 +1,233 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using STB_Bank_Transfer.Data;
 using STB_Bank_Transfer.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
+using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 
-namespace STB_Bank_Transfer.Controllers
+[Route("api/[controller]")]
+[ApiController]
+[Authorize] // Toutes les actions nécessitent une authentification
+public class BanquierController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class BanquierController : ControllerBase
+    private readonly ApplicationDbContext _context;
+
+    public BanquierController(ApplicationDbContext context)
     {
-        private static readonly List<Banquier> _banquiers = new List<Banquier>();
-        private static readonly List<Virement> _virements = new List<Virement>();
-        private readonly ApplicationDbContext _context;
+        _context = context;
+    }
 
-        public BanquierController(ApplicationDbContext context)
+    // PUT: api/Banquier/5
+    [HttpPut("{id}")]
+[Authorize(Roles = $"{UserRoles.Banquier}")]
+public async Task<IActionResult> UpdateBanquier(int id, [FromBody] Banquier banquierUpdate)
+{
+    try
+    {
+        // Vérification plus robuste de l'ID
+        var currentUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(currentUserIdClaim))
+            return Forbid("Claim NameIdentifier manquant");
+
+        if (!int.TryParse(currentUserIdClaim, out var currentUserId))
+            return Forbid("ID utilisateur invalide");
+
+        var isAdmin = User.IsInRole(UserRoles.Admin);
+
+        // Un banquier ne peut modifier que son propre compte
+        if (!isAdmin && currentUserId != id)
+            return Forbid($"Vous ne pouvez modifier que votre propre profil (ID:{currentUserId} != {id})");
+
+        // Récupération et vérification de l'entité
+        var existingBanquier = await _context.Banquiers.FindAsync(id);
+        if (existingBanquier == null)
+            return NotFound();
+
+        // Journalisation pour débogage
+
+        // Mise à jour des champs
+        existingBanquier.Nom = banquierUpdate.Nom ?? existingBanquier.Nom;
+        existingBanquier.Email = banquierUpdate.Email ?? existingBanquier.Email;
+
+        if (!string.IsNullOrWhiteSpace(banquierUpdate.MotDePasse))
+            existingBanquier.SetPassword(banquierUpdate.MotDePasse);
+
+        // Seul l'admin peut modifier le rôle
+        if (isAdmin && !string.IsNullOrWhiteSpace(banquierUpdate.Role))
+            existingBanquier.Role = banquierUpdate.Role;
+
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, "Une erreur interne est survenue");
+    }
+}
+
+    [HttpPost("Clients")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Banquier}")]
+    public async Task<IActionResult> RegisterClient([FromBody] Client model)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        if (await _context.Clients.AnyAsync(c => c.Email == model.Email))
+            return BadRequest("Email déjà utilisé");
+
+        // Récupérer l'ID du banquier authentifié
+        var banquierId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+        // Créer le client
+        var client = new Client
         {
-            _context = context;
+            Nom = model.Nom,
+            Email = model.Email,
+            Role = UserRoles.Client,
+            BanquierId = banquierId
+        };
+        client.SetPassword(model.MotDePasse);
+
+        // Créer le compte associé
+        var compte = new Compte
+        {
+            Solde = model.Solde,
+            TypeCompte = model.TypeCompte ?? "Courant",
+            BanquierId = banquierId
+        };
+
+        _context.Clients.Add(client);
+        _context.Comptes.Add(compte);
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Client et compte créés avec succès",
+            clientId = client.IdClient,
+            compteId = compte.IdCompte
+        });
+    }
+
+    private object GetClientById()
+    {
+        throw new NotImplementedException();
+    }
+
+    // GET: api/Banquier/Clients/5
+    [HttpGet("Clients/{id}")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Banquier}")]
+    public async Task<ActionResult<Client>> GetClient(int id)
+    {
+        var client = await _context.Clients.FindAsync(id);
+        if (client == null)
+            return NotFound();
+
+        // Vérifier que le banquier a accès à ce client
+        if (!User.IsInRole(UserRoles.Admin) &&
+            client.BanquierId != int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value))
+        {
+            return Forbid();
         }
 
-        // Méthode pour hacher le mot de passe avec SHA256
-        private string HashPassword(string password)
+        // Ne pas retourner le mot de passe
+        client.MotDePasse = null;
+        return client;
+    }
+
+    // GET: api/Banquier/Virements/EnAttente
+    [HttpGet("Virements/EnAttente")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Banquier}")]
+    public async Task<ActionResult<IEnumerable<Virement>>> GetPendingTransfers()
+    {
+        var query = _context.Virements
+            .Where(v => v.Statut == StatutVirement.EN_ATTENTE)
+            .Include(v => v.Comptes);
+
+        // Un banquier ne voit que les virements de ses clients
+        if (!User.IsInRole(UserRoles.Admin))
         {
-            using (var sha256 = SHA256.Create())
-            {
-                var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                return BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
-            }
+            var banquierId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Virement, Compte>)query.Where(v => v.Comptes.Client.BanquierId == banquierId);
         }
 
-        [HttpPost("Clients")]
-        public async Task<ActionResult<Client>> CreateClient([FromBody] Client client)
+        return await query.ToListAsync();
+    }
+
+    // PUT: api/Banquier/Virements/5/Approuver
+    [HttpPut("Virements/{id}/Approuver")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Banquier}")]
+    public async Task<IActionResult> ApproveTransfer(int id)
+    {
+        var virement = await GetVirementWithAccessCheck(id);
+        if (virement is NotFoundResult)
+            return virement;
+        if (virement is ForbidResult)
+            return virement;
+
+        var actualVirement = (Virement)((OkObjectResult)virement).Value;
+
+        if (actualVirement.Statut != StatutVirement.EN_ATTENTE)
+            return BadRequest("Seuls les virements en attente peuvent être approuvés");
+
+        actualVirement.Statut = StatutVirement.APPROUVE;
+        actualVirement.DateValidation = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Virement approuvé avec succès" });
+    }
+
+    // PUT: api/Banquier/Virements/5/Rejeter
+    [HttpPut("Virements/{id}/Rejeter")]
+    [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Banquier}")]
+    public async Task<IActionResult> RejectTransfer(int id, [FromBody] string raison)
+    {
+        if (string.IsNullOrWhiteSpace(raison))
+            return BadRequest("La raison du rejet est requise");
+
+        var virement = await GetVirementWithAccessCheck(id);
+        if (virement is NotFoundResult)
+            return virement;
+        if (virement is ForbidResult)
+            return virement;
+
+        var actualVirement = (Virement)((OkObjectResult)virement).Value;
+
+        if (actualVirement.Statut != StatutVirement.EN_ATTENTE)
+            return BadRequest("Seuls les virements en attente peuvent être rejetés");
+
+        actualVirement.Statut = StatutVirement.REJETE;
+        actualVirement.DateValidation = DateTime.UtcNow;
+        actualVirement.RaisonRejet = raison;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Virement rejeté" });
+    }
+
+    private async Task<IActionResult> GetVirementWithAccessCheck(int id)
+    {
+        var virement = await _context.Virements
+            .Include(v => v.Comptes)
+            .ThenInclude(c => c.Client)
+            .FirstOrDefaultAsync(v => v.IdVirement == id);
+
+        if (virement == null)
+            return NotFound("Virement non trouvé");
+
+        // Vérifier les droits d'accès
+        if (!User.IsInRole(UserRoles.Admin) &&
+            virement.Comptes.Client.BanquierId != int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value))
         {
-            if (client == null)
-                return BadRequest("Client data is required");
-
-            if (string.IsNullOrWhiteSpace(client.Nom))
-                return BadRequest("Client name is required");
-
-            if (string.IsNullOrWhiteSpace(client.Email))
-                return BadRequest("Email is required");
-
-            if (string.IsNullOrWhiteSpace(client.MotDePasse))
-                return BadRequest("Password is required");
-
-            // Vérification de l'email unique
-            if (_banquiers.Any(b => b.Email == client.Email) ||
-                await _context.Clients.AnyAsync(c => c.Email == client.Email))
-            {
-                return Conflict("Email already exists");
-            }
-
-            // Hachage du mot de passe avant sauvegarde
-            client.MotDePasse = HashPassword(client.MotDePasse);
-
-            // Ajout au contexte
-            _context.Clients.Add(client);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetClient), new { id = client.IdClient }, client);
+            return Forbid();
         }
 
-        [HttpGet("Clients/{id}")]
-        public async Task<ActionResult<Client>> GetClient(int id)
-        {
-            // First check database
-            var client = await _context.Clients.FindAsync(id);
+        return Ok(virement);
+    }
 
-            // If not found in database, check static list (if needed)
-            // client = client ?? _clients.FirstOrDefault(c => c.IdClient == id);
-
-            return client == null ? NotFound() : client;
-        }
-
-
-
-        [HttpGet("Virements/EnAttente")]
-        public ActionResult<IEnumerable<Virement>> GetPendingTransfers()
-        {
-            return _virements
-                .Where(v => v.Statut == StatutVirement.EN_ATTENTE)
-                .OrderBy(v => v.DateCreation)
-                .ToList();
-        }
-
-        [HttpGet("Virements/Rejetes")]
-        public ActionResult<IEnumerable<Virement>> GetRejectedTransfers()
-        {
-            return _virements
-                .Where(v => v.Statut == StatutVirement.REJETE)
-                .OrderByDescending(v => v.DateValidation)
-                .ToList();
-        }
-
-        [HttpPut("Virements/{id}/Approuver")]
-        public IActionResult ApproveTransfer(int id)
-        {
-            var transfer = _virements.FirstOrDefault(v => v.IdVirement == id);
-            if (transfer == null) return NotFound("Transfer not found");
-            if (transfer.Statut != StatutVirement.EN_ATTENTE)
-                return BadRequest("Only pending transfers can be approved");
-
-            transfer.Statut = StatutVirement.APPROUVE;
-            transfer.DateValidation = DateTime.Now;
-            return Ok(new { Message = "Transfer approved", Transfer = transfer });
-        }
-
-        [HttpPut("Virements/{id}/Rejeter")]
-        public IActionResult RejectTransfer(int id, [FromBody] string raison)
-        {
-            var transfer = _virements.FirstOrDefault(v => v.IdVirement == id);
-            if (transfer == null) return NotFound("Transfer not found");
-            if (transfer.Statut != StatutVirement.EN_ATTENTE)
-                return BadRequest("Only pending transfers can be rejected");
-            if (string.IsNullOrWhiteSpace(raison))
-                return BadRequest("Rejection reason is required");
-
-            transfer.Statut = StatutVirement.REJETE;
-            transfer.DateValidation = DateTime.Now;
-            transfer.RaisonRejet = raison;
-            return Ok(new { Message = "Transfer rejected", Transfer = transfer });
-        }
+    private bool BanquierExists(int id)
+    {
+        return _context.Banquiers.Any(e => e.IdBanquier == id);
     }
 }
