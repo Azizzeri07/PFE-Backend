@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace STB_Bank_Transfer.Migrations
 {
     /// <inheritdoc />
-    public partial class init : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -20,7 +20,8 @@ namespace STB_Bank_Transfer.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Nom = table.Column<string>(type: "text", nullable: false),
                     Email = table.Column<string>(type: "text", nullable: false),
-                    MotDePasse = table.Column<string>(type: "text", nullable: false)
+                    MotDePasse = table.Column<string>(type: "text", nullable: false),
+                    Role = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -49,16 +50,25 @@ namespace STB_Bank_Transfer.Migrations
                     Nom = table.Column<string>(type: "text", nullable: false),
                     Email = table.Column<string>(type: "text", nullable: false),
                     MotDePasse = table.Column<string>(type: "text", nullable: false),
-                    BanquierIdBanquier = table.Column<int>(type: "integer", nullable: true)
+                    Role = table.Column<string>(type: "text", nullable: false),
+                    BanquierId = table.Column<int>(type: "integer", nullable: false),
+                    IdCompte = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Clients", x => x.IdClient);
                     table.ForeignKey(
-                        name: "FK_Clients_Banquiers_BanquierIdBanquier",
-                        column: x => x.BanquierIdBanquier,
+                        name: "FK_Clients_Banquiers_BanquierId",
+                        column: x => x.BanquierId,
                         principalTable: "Banquiers",
-                        principalColumn: "IdBanquier");
+                        principalColumn: "IdBanquier",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Clients_Comptes_IdCompte",
+                        column: x => x.IdCompte,
+                        principalTable: "Comptes",
+                        principalColumn: "IdCompte",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -117,9 +127,15 @@ namespace STB_Bank_Transfer.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Clients_BanquierIdBanquier",
+                name: "IX_Clients_BanquierId",
                 table: "Clients",
-                column: "BanquierIdBanquier");
+                column: "BanquierId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Clients_IdCompte",
+                table: "Clients",
+                column: "IdCompte",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Operations_CompteIdCompte",
@@ -147,13 +163,13 @@ namespace STB_Bank_Transfer.Migrations
                 name: "Virements");
 
             migrationBuilder.DropTable(
-                name: "Comptes");
-
-            migrationBuilder.DropTable(
                 name: "Clients");
 
             migrationBuilder.DropTable(
                 name: "Banquiers");
+
+            migrationBuilder.DropTable(
+                name: "Comptes");
         }
     }
 }

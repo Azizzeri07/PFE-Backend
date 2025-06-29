@@ -1,5 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using STB_Bank_Transfer.Data;
 using STB_Bank_Transfer.Models;
+using static STB_Bank_Transfer.Models.Virement;
 
 namespace STB_Bank_Transfer.Controllers
 {
@@ -7,33 +10,59 @@ namespace STB_Bank_Transfer.Controllers
     [ApiController]
     public class ClientsController : ControllerBase
     {
+
+        private readonly ApplicationDbContext _context;
+
+        public ClientsController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
         private static List<Client> clients = new List<Client>();
         private static int nextClientId = 1;
 
 
+        // Assuming this is inside your "ClientsController" or a similar controller.
+        // The route parameter {id} should be the ID of the client.
+
         [HttpPost("{id}/Virements")]
-        public ActionResult<Virement> CreateVirement(int id, [FromBody] Virement virement)
+        public async Task<ActionResult<Virement>> CreateVirement(int id, [FromBody] CreateVirementRequest virementRequest)
         {
-            var client = clients.FirstOrDefault(c => c.IdClient == id);
-            if (client == null) return NotFound();
+            // 1. Find the client IN THE DATABASE using the DbContext.
+            var client = await _context.Clients.FindAsync(id);
 
-            virement.IdVirement = VirementsController.GetNextVirementId();
-            virement.DateCreation = DateTime.Now;
-            virement.Statut = StatutVirement.EN_ATTENTE;
+            // 2. Check if the client was found in the database.
+            if (client == null)
+            {
+                return NotFound($"Client with ID {id} not found.");
+            }
 
-            client.Virements.Add(virement);
-            return CreatedAtAction(nameof(VirementsController.GetVirement),
-                               "Virements",
-                               new { id = virement.IdVirement },
-                               virement);
+            // 3. Create a new Virement entity from the request data (DTO).
+            var virement = new Virement
+            {
+                DateCreation = DateTime.UtcNow,
+                Statut = StatutVirement.EN_ATTENTE,
+                Montant = virementRequest.Montant,
+                Motif = virementRequest.Motif,
+                NumCompteSource = client.IdCompte, // Assuming the client's account is the source
+                NumCompteDestination = virementRequest.NumCompteDestination,
+                RaisonRejet = string.Empty
+            };
+
+            _context.Virements.Add(virement);
+            await _context.SaveChangesAsync();
+
+            // Return a Created response with the correct URI for the virement resource
+            return Created($"/api/Virements/{virement.IdVirement}", virement);
         }
 
         [HttpGet("{id}/Virements")]
-        public ActionResult<List<Virement>> GetHistoriqueVirements(int id)
+        public async Task<ActionResult<List<Virement>>> GetHistoriqueVirements(int id)
         {
-            var client = clients.FirstOrDefault(c => c.IdClient == id);
+            // Use the database context to get the client and their virements
+            var client = await _context.Clients.Include(c => c.Virements).FirstOrDefaultAsync(c => c.IdClient == id);
             if (client == null) return NotFound();
-            return client.Virements;
+            return client.Virements ?? new List<Virement>();
         }
     }
 }

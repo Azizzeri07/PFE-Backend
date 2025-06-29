@@ -12,8 +12,8 @@ using STB_Bank_Transfer.Data;
 namespace STB_Bank_Transfer.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250626103257_init")]
-    partial class init
+    [Migration("20250629210037_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -45,6 +45,10 @@ namespace STB_Bank_Transfer.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("IdBanquier");
 
                     b.ToTable("Banquiers");
@@ -58,10 +62,14 @@ namespace STB_Bank_Transfer.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("IdClient"));
 
-                    b.Property<int?>("BanquierIdBanquier")
+                    b.Property<int>("BanquierId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("IdCompte")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -73,9 +81,16 @@ namespace STB_Bank_Transfer.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("IdClient");
 
-                    b.HasIndex("BanquierIdBanquier");
+                    b.HasIndex("BanquierId");
+
+                    b.HasIndex("IdCompte")
+                        .IsUnique();
 
                     b.ToTable("Clients");
                 });
@@ -186,9 +201,21 @@ namespace STB_Bank_Transfer.Migrations
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Client", b =>
                 {
-                    b.HasOne("STB_Bank_Transfer.Models.Banquier", null)
+                    b.HasOne("STB_Bank_Transfer.Models.Banquier", "Banquier")
                         .WithMany("Clients")
-                        .HasForeignKey("BanquierIdBanquier");
+                        .HasForeignKey("BanquierId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("STB_Bank_Transfer.Models.Compte", "Compte")
+                        .WithOne()
+                        .HasForeignKey("STB_Bank_Transfer.Models.Client", "IdCompte")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Banquier");
+
+                    b.Navigation("Compte");
                 });
 
             modelBuilder.Entity("STB_Bank_Transfer.Models.Operation", b =>

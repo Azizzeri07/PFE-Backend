@@ -2,9 +2,11 @@
 using Microsoft.EntityFrameworkCore;
 using STB_Bank_Transfer.Data;
 using STB_Bank_Transfer.Models;
+using STB_Bank_Transfer.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -33,37 +35,79 @@ namespace STB_Bank_Transfer.Controllers
                 return BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
             }
         }
+        // In BanquierController.cs
 
         [HttpPost("Clients")]
-        public async Task<ActionResult<Client>> CreateClient([FromBody] Client client)
+        public async Task<ActionResult<Client>> CreateClient([FromBody] CreateClientRequest request)
         {
-            if (client == null)
+            // --- Your validation logic remains the same ---
+            if (request == null)
                 return BadRequest("Client data is required");
 
-            if (string.IsNullOrWhiteSpace(client.Nom))
-                return BadRequest("Client name is required");
+            // ... (other validations for Nom, Email, MotDePasse, BanquierId) ...
 
-            if (string.IsNullOrWhiteSpace(client.Email))
-                return BadRequest("Email is required");
+            var banker = await _context.Banquiers.FindAsync(request.BanquierId);
+            if (banker == null)
+                return BadRequest("Specified banker does not exist");
 
-            if (string.IsNullOrWhiteSpace(client.MotDePasse))
-                return BadRequest("Password is required");
-
-            // Vérification de l'email unique
-            if (_banquiers.Any(b => b.Email == client.Email) ||
-                await _context.Clients.AnyAsync(c => c.Email == client.Email))
+            if (await _context.Clients.AnyAsync(c => c.Email == request.Email))
             {
                 return Conflict("Email already exists");
             }
 
-            // Hachage du mot de passe avant sauvegarde
-            client.MotDePasse = HashPassword(client.MotDePasse);
+            // --- REFACTORED LOGIC ---
 
-            // Ajout au contexte
+            // 1. Create the new Compte and Client objects in memory.
+            //    Do NOT save them yet.
+            var compte = new Compte
+            {
+                IdCompte = Guid.NewGuid().ToString(),
+                Solde = 0,
+                TypeCompte = request.TypeCompte ?? "Courant"
+            };
+
+            var client = new Client
+            {
+                Nom = request.Nom,
+                Email = request.Email,
+                MotDePasse = HashPassword(request.MotDePasse),
+                Role = UserRole.Client,
+                BanquierId = request.BanquierId,
+
+                // Let EF Core manage the foreign key by assigning the navigation property.
+                // This is the idiomatic way. EF will see the new Compte and insert it first,
+                // then use its generated ID for the Client insert.
+                Compte = compte
+
+                // You no longer need to set 'IdCompte' manually:
+                // IdCompte = compte.IdCompte, // THIS LINE IS NO LONGER NEEDED
+            };
+
+            // 2. Add BOTH entities to the context.
             _context.Clients.Add(client);
+            // You don't even need to add the 'compte' separately,
+            // EF Core knows about it through the 'client.Compte' relationship.
+            // _context.Comptes.Add(compte); // This is not required
+
+            // 3. Save everything in a single transaction.
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetClient), new { id = client.IdClient }, client);
+            // The rest of your return logic is fine.
+            return CreatedAtAction(nameof(GetClient), new { id = client.IdClient }, new
+            {
+                client.IdClient,
+                client.Nom,
+                client.Email,
+                client.Role,
+                client.BanquierId,
+                client.IdCompte, // This will be correctly populated now
+                Compte = new
+                {
+                    compte.IdCompte,
+                    compte.Solde,
+                    compte.TypeCompte
+                }
+            });
         }
 
         [HttpGet("Clients/{id}")]
@@ -79,23 +123,24 @@ namespace STB_Bank_Transfer.Controllers
         }
 
 
-
         [HttpGet("Virements/EnAttente")]
-        public ActionResult<IEnumerable<Virement>> GetPendingTransfers()
+        public ActionResult<IEnumerable<VirementDto>> GetPendingTransfers()
         {
-            return _virements
+            var pending = _virements
                 .Where(v => v.Statut == StatutVirement.EN_ATTENTE)
                 .OrderBy(v => v.DateCreation)
                 .ToList();
+            return VirementMapper.ToDtoList(pending);
         }
 
         [HttpGet("Virements/Rejetes")]
-        public ActionResult<IEnumerable<Virement>> GetRejectedTransfers()
+        public ActionResult<IEnumerable<VirementDto>> GetRejectedTransfers()
         {
-            return _virements
+            var rejected = _virements
                 .Where(v => v.Statut == StatutVirement.REJETE)
                 .OrderByDescending(v => v.DateValidation)
                 .ToList();
+            return VirementMapper.ToDtoList(rejected);
         }
 
         [HttpPut("Virements/{id}/Approuver")]
